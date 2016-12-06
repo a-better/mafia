@@ -27,8 +27,10 @@ RoomManager.prototype = {
 		}
 	},
 	init : function(data){
+		this.room.seatManager.createSeats(data.maxActor);
 		this.room.setPlayers(data);
 		this.room.minActor = data.minActor;
+		this.room.maxActor = data.maxActor;		
 		this.notifyObserver();
 	},
 	update : function(tag, data){

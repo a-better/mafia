@@ -1,0 +1,40 @@
+.messageDiv{
+	position: absolute;
+    z-index: 1;
+    top : 90%;
+    left : 0%;
+
+}
+.messageInput{
+    font-size : 16px;
+    width : 85%;
+    height : 10%;
+}
+.messageButton{
+	position: absolute;
+	left : 5%;
+}
+.chattingDiv{
+	position: absolute;
+	background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1;	
+	overflow : auto;
+    top : 65%;
+    left : 0%;
+    font-size : 16px;
+    width : 100%;
+    height : 25%;
+}
+
+.buttonDiv{
+	position: absolute;
+	z-index: 1;
+	top : 5%;
+	left : 80%;
+	width : 20%;
+	height : 100%;
+}	
+
+.white{
+	color: white;
+}

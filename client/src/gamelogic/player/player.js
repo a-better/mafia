@@ -12,6 +12,11 @@ var Player = function(nickname, thumbnail, id){
 	this.enableSave = false;
 	this.enableVote = false;
 	this.enableKill = false;
+
+	this.isTalk = false;
+	this.talk = '';
+
+	this.seat = new Object();
 }
 
 Player.prototype.constructor = Player;

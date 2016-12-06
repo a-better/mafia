@@ -59,7 +59,8 @@ MafiaRoom.prototype.join= function(id, nickname, thumbnail){
 	if(this.actorManager.length() == 1){
 		this.setHostClient();
 		this.debug.log("LOG", "호스트는 "+this.hostId+"입니다.");
-		this.network.sendNotice(this.id,"호스트는 "+this.hostId+"입니다.");
+		var nickname = this.actorManager.getNickname(this.hostId);
+		this.network.broadcastNotice(this.id,"호스트는 "+nickname+"입니다.");
 
 	}
 }
@@ -68,7 +69,8 @@ MafiaRoom.prototype.leave = function(id){
 	if(this.actorManager.length() > 0 && id == this.hostId){
 		this.setHostClient();	
 		this.debug.log("LOG", "호스트가 "+ this.hostId+"로 변경되었습니다.");
-		this.network.sendNotice(this.id,"호스트는 "+this.hostId+"입니다.");		
+		var nickname = this.actorManager.getNickname(this.hostId);
+		this.network.broadcastNotice(this.id,"호스트는 "+nickname+"입니다.");		
 	}
 	if(this.checkEndCondition()){
 		this.end();
@@ -78,6 +80,7 @@ MafiaRoom.prototype.start = function(room){
 	if(this.stateManager.current == 'idle'){
 		this.reset();
 		this.setActorState();
+		this.network.broadcastNotice(this.id,"밤이 되었습니다.");	
 		this.stateManager.changeState('night');
 		this.network.changeState(this.id, 'night');
 		this.stateManager.getCurrentState().count++;
@@ -112,6 +115,7 @@ MafiaRoom.prototype.toggleDayNight = function(room){
 	if(this.stateManager.current == 'night'){
 		this.kill();
 		this.actorManager.reset();
+		this.network.broadcastNotice(this.id,"낮이 되었습니다.");	
 		this.stateManager.changeState('day');
 		this.network.changeState(this.id, 'day');
 		time = this.dayTime;
@@ -122,6 +126,7 @@ MafiaRoom.prototype.toggleDayNight = function(room){
 			this.debug.log("LOG", "투표 무효");
 			this.network.broadcastNotice(this.id,"투표가 무효로 되었습니다.");	
 			this.actorManager.reset();
+			this.network.broadcastNotice(this.id,"밤이 되었습니다.");
 			this.stateManager.changeState('night');
 			this.network.changeState(this.id, 'night');		
 		}
@@ -147,6 +152,7 @@ MafiaRoom.prototype.toggleDayNight = function(room){
 			this.network.broadcastNotice(this.id,"투표가 무효로 되었습니다.");	
 		}
 		this.actorManager.reset();
+		this.network.broadcastNotice(this.id,"밤이 되었습니다.");
 		this.stateManager.changeState('night');
 		this.network.changeState(this.id, 'night');	
 	}
@@ -163,7 +169,7 @@ MafiaRoom.prototype.useSkill = function(actor, target){
 	this.debug.log("LOG", 'mafiaroom 143'+actor + '/' + target);
 	if(this.enableSkill(actor, target)){
 		this.actorManager.setSkillTarget(actor, target);
-		this.network.sendNotice(this.id, actor, this.actorManager.getNickname(target)+"에게 스킬을 사용하였습니다.");
+		this.network.sendNotice(actor, actor, this.actorManager.getNickname(target)+"에게 스킬을 사용하였습니다.");
 		this.detect(actor, target);
 	}
 }
@@ -198,7 +204,7 @@ MafiaRoom.prototype.vote = function(actor, target){
 	if(this.stateManager.current == 'day'){
 		this.actorManager.vote(actor, target);
 		var vote = this.actorManager.objects[target].state.vote;
-		var message = this.actorManager.getNickname(target) +"이" + vote + '표 획득'; 
+		var message = this.actorManager.getNickname(target) +"이(가)" + vote + '표 획득'; 
 		this.network.broadcastNotice(this.id, message);
 	}
 	else{
@@ -217,7 +223,7 @@ MafiaRoom.prototype.detect = function(actor, target){
 			if(detectedJob){
 				if(this.actorManager.objects[actor].state.contacted == false){
 					this.debug.log('LOG', target+"의 직업은 마피아입니다. 당신은 마피아팀");
-					this.network.sendNotice(actor, target, target+"의 직업은 마피아입니다. 당신은 마피아팀이 되었습니다.");
+					this.network.sendNotice(actor, target, targetNickname+"의 직업은 마피아입니다. 당신은 마피아팀이 되었습니다.");
 					this.actorManager.objects[actor].state.contact();
 				}
 				else{
@@ -225,11 +231,13 @@ MafiaRoom.prototype.detect = function(actor, target){
 					this.network.sendNotice(actor, target, targetNickname+"의 직업은" + detectedJob);
 				}
 			}
+			else{
+				this.network.sendNotice(actor, target, targetNickname +'은 마피아가 아닙니다.');
+			}
 			if(this.actorManager.isSoldier(target)){
 				this.debug.log('LOG', '군인이 스파이를 감지함');
 				this.debug.log('LOG', target+"의 직업은 "+detectedJob);
 				this.debug.log('LOG', actor+"의 직업은 스파이");
-				this.network.sendNotice(actor, target, targetNickname+"의 직업은" + detectedJob);	
 				this.network.sendNotice(target, actor, "스파이를 감지함 스파이는 "+actorNickname);
 
 			}
@@ -240,6 +248,9 @@ MafiaRoom.prototype.detect = function(actor, target){
 			if(detectedJob){
 				this.debug.log('LOG', target+"의 직업은 마피아입니다.");
 				this.network.sendNotice(actor, target, targetNickname+"의 직업은 마피아입니다.");
+			}
+			else{
+				this.network.sendNotice(actor, target, targetNickname+"의 직업은 마피아가 아닙니다.");
 			}			
 			break;
 	}
@@ -289,11 +300,11 @@ MafiaRoom.prototype.isPlaying = function(){
 	}
 }
 MafiaRoom.prototype.isOverMaximumActor = function(){
-	if(this.actorManager.length >= this.maxActor){
+	if(this.actorManager.length() >= this.maxActor){
 		return true;
 	}
 	else{
-		false;
+		return false;
 	}
 }
 

@@ -46,8 +46,8 @@
 
 	var Debug = __webpack_require__(1);
 	var RoomManager = __webpack_require__(2);
-	var Network = __webpack_require__(5);
-	var UIManager = __webpack_require__(6);
+	var Network = __webpack_require__(8);
+	var UIManager = __webpack_require__(9);
 
 	var roomId = $('#roomId').val();
 	var url = $('#url').val();
@@ -150,8 +150,10 @@
 			}
 		},
 		init : function(data){
+			this.room.seatManager.createSeats(data.maxActor);
 			this.room.setPlayers(data);
 			this.room.minActor = data.minActor;
+			this.room.maxActor = data.maxActor;		
 			this.notifyObserver();
 		},
 		update : function(tag, data){
@@ -230,10 +232,11 @@
 /***/ function(module, exports, __webpack_require__) {
 
 	var Player = __webpack_require__(4);
-
+	var SeatManager = __webpack_require__(5);
 	var Room = function(roomId, url, platformServerId){
 		this.myPlayer;
 		this.players = {};
+		this.seatManager = new SeatManager();
 		this.state = 'idle';
 		this.day =0;
 		this.night = 0;
@@ -250,6 +253,7 @@
 		this.playing = false;
 
 		this.minActor = 9999;
+		this.maxActor = 0;
 	}
 
 	Room.prototype.constructor = Room;
@@ -271,6 +275,7 @@
 		},
 		join : function(nickname, thumbnail, id){
 			this.players[id] = new Player(nickname, thumbnail, id);
+			this.seatManager.join(this.players[id]);
 			debug.log("LOG", 'room 41 join' + nickname);
 			debug.log("LOG", 'room 42 join' + Object.keys(this.players).length);
 		},
@@ -281,9 +286,11 @@
 				var player = data.actorManager.objects[key];
 				debug.log("LOG", 'room 47 :' + Object.keys(data.actorManager.objects).length);
 				if(this.myPlayer.id != player.id){
-					this.players[player.id] = new Player(player.id, player.nicname, player.thumbnail);
+					this.players[player.id] = new Player(player.nickname, player.thumbnail, player.id);
+					this.seatManager.join(this.players[player.id]);
 				}		
 			}
+			this.seatManager.join(this.myPlayer);
 			debug.log("LOG", 'room 52 :' +  Object.keys(this.players));
 		},
 		setState : function(state){		
@@ -306,6 +313,7 @@
 			this.myPlayer.host = true;
 		},
 		leave : function(id){
+			this.seatManager.leave(this.players[id].seat);
 			delete this.players[id];
 		},
 		kill : function(id){
@@ -421,16 +429,32 @@
 					}
 				}
 			}
+		},
+		getPlayer : function(actor){
+			if(this.myPlayer.id == actor){
+				return this.myPlayer;
+			}
+			else{
+				for(key in this.players){
+					if(this.players[key].id == actor){
+						return this.players[key];
+					}
+				}
+			}
 		},	
 		onBroadcastMessage : function(data){
-			var nickname = this.getNickname(data.actor);
-			this.chatting = nickname+':' + data.message;
+			var player = this.getPlayer(data.actor);
+			this.chatting = player.nickname+':' + data.message;
 			this.messageType = 'normal';
 			this.isPrinted = false;	
+
+			player.isTalk = true;
+			player.talk = data.message;
+
 		},
 		onSendMessage : function(data){
-			var nickname = this.getNickname(data.actor);
-			this.chatting = nickname+':' + data.message;
+			var player = this.getPlayer(data.actor);
+			this.chatting = player.nickname+':' + data.message;
 			this.isPrinted = false;	
 			if(data.tag == 'mafia'){
 				this.messageType = 'mafia';
@@ -438,6 +462,9 @@
 			else if(data.tag == 'dead'){
 				this.messageType = 'dead';
 			}
+
+			player.isTalk = true;
+			player.talk = data.message;
 		},	
 		onBroadcastNotice : function(data){
 			this.chatting = data.message;
@@ -483,6 +510,11 @@
 		this.enableSave = false;
 		this.enableVote = false;
 		this.enableKill = false;
+
+		this.isTalk = false;
+		this.talk = '';
+
+		this.seat = new Object();
 	}
 
 	Player.prototype.constructor = Player;
@@ -510,6 +542,156 @@
 
 /***/ },
 /* 5 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var GameObjectManager = __webpack_require__(6);
+	var Seat = __webpack_require__(7);
+	var SeatManager = function(){
+		GameObjectManager.call(this);
+		GAME_WIDTH = 1248 * 0.5;
+		GAME_HEIGHT = 1024 * 0.5;
+		this.seatPos = [
+			{
+				x: GAME_WIDTH * 0.71,
+				y: GAME_HEIGHT * 0.51
+			},
+			{
+				x: GAME_WIDTH * 0.64,
+				y: GAME_HEIGHT * 0.31
+			},
+			{
+				x: GAME_WIDTH * 0.36,
+				y: GAME_HEIGHT * 0.36
+			},
+			{
+				x: GAME_WIDTH * 0.75,
+				y: GAME_HEIGHT * 0.39
+			},
+			{
+				x: GAME_WIDTH * 0.51,
+				y: GAME_HEIGHT * 0.66 
+			},
+			{
+				x: GAME_WIDTH * 0.64,
+				y: GAME_HEIGHT * 0.69 
+			},
+			{
+				x: GAME_WIDTH * 0.39,
+				y: GAME_HEIGHT * 0.51
+			},
+			{
+				x: GAME_WIDTH * 0.43,
+				y: GAME_HEIGHT *0.86
+			},
+			{
+				x:GAME_WIDTH * 0.46,
+				y: GAME_HEIGHT *0.66
+			},
+			{
+				x: GAME_WIDTH * 0.78,
+				y: GAME_HEIGHT * 0.9
+			},																		
+		]
+	}
+
+	SeatManager.prototype.constructor = SeatManager;
+	SeatManager.prototype = Object.create(GameObjectManager.prototype);
+	SeatManager.prototype.getAvailableSeat = function(){
+		for(key in this.objects){
+			if(this.objects[key].state == 'idle'){
+				return key;
+			}
+		}
+	}
+
+	SeatManager.prototype.createSeats = function(maxActor){
+
+		for(var i=0; i< maxActor; i++){
+			this.add(i, new Seat(i, this.seatPos[i].x, this.seatPos[i].y));
+		}
+	}
+
+	SeatManager.prototype.join = function(player){
+		var index  = this.getAvailableSeat();
+		this.objects[index].sit(player);
+		player.seat = this.objects[index];
+	}
+
+	SeatManager.prototype.leave = function(seat){
+		this.objects[seat.id].leave();
+	}
+
+	module.exports = SeatManager;
+
+/***/ },
+/* 6 */
+/***/ function(module, exports) {
+
+	var GameObjectManager = function(){
+		this.objects = {};
+		this.current = '';
+
+	}
+	GameObjectManager.prototype.constructor = GameObjectManager;
+
+	GameObjectManager.prototype = {
+		add : function(key, object){
+			this.objects[key] = object;
+		},
+		remove : function(key){
+			delete this.objects[key];
+		},
+		search : function(key){
+			return this.objects[key];
+		},
+		checkObject : function(key){
+			if(this.objects[key]){
+				return true;
+			}
+			else{
+				return false;
+			}
+		},
+		update : function(key, object){
+			if(this.checkObject(key)){
+				this.objects[key] = object;
+			}	
+		},
+		length : function(){
+			return Object.keys(this.objects).length;
+		}
+	}
+
+	module.exports = GameObjectManager;
+
+/***/ },
+/* 7 */
+/***/ function(module, exports) {
+
+	var Seat = function(id, x, y){
+		this.id = id;
+		this.state = 'idle';
+		this.x = x;
+		this.y = y;
+		this.player = new Object();
+	}
+
+	Seat.prototype.constructor = Seat;
+	Seat.prototype = {
+		leave : function(){
+			this.state = 'idle';
+			this.player = new Object();
+		},
+		sit : function(player){
+			this.state = 'use';
+			this.player = player;
+		}
+	}	
+
+	module.exports = Seat;
+
+/***/ },
+/* 8 */
 /***/ function(module, exports) {
 
 	var Network = function(){
@@ -551,7 +733,7 @@
 	 	  this.socket.on('current judge', network.onJudge);
 	 	},
 	 	onLeave : function(data){	
-	 		this.notifyObserver('leave', data);
+	 		network.notifyObserver('leave', data);
 	 	},
 	 	onJoin : function(data){
 	 		debug.log("LOG", 'join');
@@ -633,16 +815,18 @@
 	module.exports = Network;
 
 /***/ },
-/* 6 */
+/* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var Button = __webpack_require__(7);
-	var Chat = __webpack_require__(8);
-	var Selector = __webpack_require__(9);
+	var Button = __webpack_require__(10);
+	var Chat = __webpack_require__(11);
+	var Selector = __webpack_require__(13);
+	var World = __webpack_require__(14);
 	var UIManager = function(){
 		this.button = new Button();
 		this.chat = new Chat();
 		this.selector = new Selector();
+		this.world = new World();
 		this.roomManager;
 
 	}
@@ -656,11 +840,13 @@
 			this.button.set(roomManager);
 			this.chat.set(roomManager);
 			this.selector.set(roomManager);
+			this.world.set(roomManager);
 		},
 		update : function(){
 			this.button.update();
 			this.chat.update();
 			this.selector.update();
+			//this.world.update();
 		}
 	}
 
@@ -671,7 +857,7 @@
 
 
 /***/ },
-/* 7 */
+/* 10 */
 /***/ function(module, exports) {
 
 	
@@ -837,10 +1023,10 @@
 
 
 /***/ },
-/* 8 */
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var ChatStyleTag = __webpack_require__(10);
+	var ChatStyleTag = __webpack_require__(12);
 	var Chat = function(){
 		this.roomManager = {};
 		this.enableChat = true;
@@ -883,8 +1069,8 @@
 
 			this.chatDiv = $('#chattingBox');
 
-			this.normalTag.start = '<p>';
-			this.normalTag.end = '</p>';
+			this.normalTag.start = '<p class="white">';
+			this.normalTag.end = '</p class="white">';
 
 			this.mafiaTag.start = '<p class="text-danger"><strong>';
 			this.mafiaTag.end = '</strong></p>';
@@ -956,7 +1142,21 @@
 
 
 /***/ },
-/* 9 */
+/* 12 */
+/***/ function(module, exports) {
+
+	var ChatStyleTag = function(){
+		this.startTag = '';
+		this.endTag = '';
+	}
+
+	ChatStyleTag.prototype.constructor = ChatStyleTag;
+
+	module.exports = ChatStyleTag;
+
+
+/***/ },
+/* 13 */
 /***/ function(module, exports) {
 
 	var Selector = function(){
@@ -997,18 +1197,468 @@
 	module.exports = Selector;
 
 /***/ },
-/* 10 */
-/***/ function(module, exports) {
+/* 14 */
+/***/ function(module, exports, __webpack_require__) {
 
-	var ChatStyleTag = function(){
-		this.startTag = '';
-		this.endTag = '';
+	var PlayerCreator = __webpack_require__(15);
+
+	var World = function(){
+			thisWorld = this;
+			this.roomManager = new Object();
+	 		this.stats = new Stats();
+	 		this.stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+	 		document.body.appendChild(this.stats.dom );
+	 		this.scale = 1;
+	 		this.low = true;
+	 		if(this.low){
+	 		  this.scale = 0.5;
+	 		}
+	 		else{
+	 		  this.scale = 1;
+	 		}
+	 		this.params = {        
+	 		  stage: {
+	 		    width: window.innerWidth,
+	 		    height: window.innerHeight
+	 		  },
+	 		
+	 		  world: {
+	 		    width: 1248  * this.scale,
+	 		    height: 1024 * this.scale
+	 		  },	  
+	 		  camera: {
+	 		    zoom: 1,
+	 		    x:0,
+	 		    y:0
+	 		  }	  
+	 		}
+
+	        rendererOptions = {
+	            antialiasing: false,
+	            transparent : false,
+	            autoResize: true
+	        } 
+
+	        this.world = new pixicam.World({
+	          screenWidth: this.params.stage.width,
+	          screenHeight: this.params.stage.height,
+	          width: this.params.world.width,
+	          height: this.params.world.height
+	        });
+	        
+	        this.renderer = new PIXI.lights.WebGLDeferredRenderer(this.params.stage.width, this.params.stage.height,rendererOptions);
+	        //var renderer = new PIXI.WebGLRenderer(window.innerWidth, window.innerHeight, rendererOptions);
+	        zoom = Math.max(this.params.stage.width/this.params.world.width, this.params.stage.height/this.params.world.height);
+	        this.stage = new PIXI.Container();
+	        this.camera = this.world.camera;
+	        this.camera.zoom = zoom;
+	        this.stage.addChild(this.world);  
+	        this.renderer.view.style.position = "absolute";
+	        this.renderer.view.style.top = "0px";
+	        this.renderer.view.style.left = "0px";
+	        this.movie;
+	        document.body.appendChild(this.renderer.view);
+	        this.frames = [];
+	        this.normal_frames = [];
+	        this.playerCreator = new Object();
+	        PIXI.loader
+	            .add('mafia', 'assets/images/low/mafiamap.png')
+	            .add('mafia_normal', 'assets/images/low/mafiamap_NORMALS.png')
+	            .add('campfire', 'assets/images/low/campfire.json')
+	            .add('campfire_normal', 'assets/images/low/campfire_NORMALS.json')
+	            .add('assets/images/mafiaNormal.fnt')
+	            .add('assets/images/speechBubble.json')
+	            .add('assets/images/low/mafiaCharacter.json')
+	            .add('assets/images/low/mafiaCharacter_NORMALS.json')
+	            .load(function (loader, res) {
+	                var mafiaBackground = new PIXI.Sprite(res.mafia.texture);
+	                mafiaBackground.normalTexture = res.mafia_normal.texture;
+	                mafiaBackground.setTransform(0, 0);
+	                thisWorld.world.addChild(mafiaBackground);             
+	                for(var i=0; i<4; i++){
+	                    thisWorld.frames.push(PIXI.Texture.fromFrame('campfire '+i+'.ase'));
+	                    thisWorld.normal_frames.push(PIXI.Texture.fromFrame('campfire_NORMALS '+i+'.ase'));
+	                }
+
+	             	thisWorld.movie = new PIXI.Sprite(thisWorld.frames[0]);
+	             	thisWorld.movie.normalTexture = thisWorld.normal_frames[0];
+	             	thisWorld.movie.setTransform(0.5*thisWorld.params.world.width, 0.5 * thisWorld.params.world.height);
+	             	thisWorld.movie.anchor.set(0.5, 0.5);
+
+	             	thisWorld.world.addChild(thisWorld.movie);
+
+	                thisWorld.world.addChild(new PIXI.lights.AmbientLight(0x110A38, 1));
+
+	                thisWorld.renderer.view.addEventListener("mousedown", thisWorld.mousedown);
+	                thisWorld.renderer.view.addEventListener("mouseup", thisWorld.mouseup);
+	                thisWorld.renderer.view.addEventListener("mousemove", thisWorld.mousemove);
+	                thisWorld.renderer.view.addEventListener("touchstart", thisWorld.touchstart, false);
+	                thisWorld.renderer.view.addEventListener("touchmove", thisWorld.touchmove, false);
+	                fireLight = new PIXI.lights.PointLight(0xff9933, 3);
+	                fireLight.originalX = thisWorld.movie.position.x;
+	                fireLight.originalY = thisWorld.movie.position.y;
+	                fireLight.position.x = thisWorld.movie.position.x;
+	                fireLight.position.y = thisWorld.movie.position.y;
+	                thisWorld.playerCreator = new PlayerCreator(thisWorld.world, document); 
+	                thisWorld.world.addChild(fireLight);
+	                thisWorld.world.update();
+	                requestAnimationFrame(thisWorld.animate);      
+	        });
+	        this.down = false;
+	        this.oldX;
+	        this.oldY;  
+	        this.lastTime = 0;
+	        this.i = 0;
+	        this.d = new Date();
+	        this.lastTime = this.d.getTime();
+	        this.light = true;         
 	}
 
-	ChatStyleTag.prototype.constructor = ChatStyleTag;
+	World.prototype.constructor = World;
+	World.prototype = {
 
-	module.exports = ChatStyleTag;
+		set : function(roomManager){
+			this.roomManager = roomManager;
+		},
+	    isTimeToAnimate : function(time, tick){
+	        if(time - this.lastTime > tick){
+	            this.lastTime = time;
+	            return true;
+	        }
+	        else{
+	            return false;
+	        }
+	    },   
+	    animate :function() {
+	      thisWorld.stats.begin();
+	      d = new Date();
+	      time = d.getTime();
+	      if(thisWorld.isTimeToAnimate(time, 1000/33)){
+	        thisWorld.movie._originalTexture = thisWorld.frames[thisWorld.i%4];
+	        thisWorld.movie.normalTexture = thisWorld.normal_frames[thisWorld.i%4];
+	        thisWorld.i++;
+	        if(thisWorld.i%4 == 0){
+	        	thisWorld.i = 0;
+	        }
+	      }     
+	      thisWorld.renderer.render(thisWorld.stage, true);
+	      thisWorld.update();
+	      thisWorld.world.update();
+	      thisWorld.stats.end();
+	      requestAnimationFrame(thisWorld.animate);    
+	    },
+	    mousedown : function(e){
+	        thisWorld.down = true;
+	        thisWorld.oldX = e.clientX;
+	        thisWorld.oldY = e.clientY;
+	      console.log(Math.ceil(e.clientX*100/624)+ '/' + Math.ceil(e.clientY*100/512));
+	    },
+	    mousemove : function(e){
+	     if(thisWorld.down == true)
+	     {
+	      var cameraOldX = thisWorld.camera.x;
+	      var cameraOldY = thisWorld.camera.y;
+	      thisWorld.camera.x -= e.clientX - thisWorld.oldX;
+	      thisWorld.camera.y -= e.clientY - thisWorld.oldY; 
+	      thisWorld.camera.x = thisWorld.setCameraBound('x', thisWorld.camera.x, e.clientX - thisWorld.oldX);
+	      thisWorld.camera.y = thisWorld.setCameraBound('y', thisWorld.camera.y, e.clientY - thisWorld.oldY);                        
+	      thisWorld.oldX = e.clientX;
+	      thisWorld.oldY = e.clientY;
+	     }
+	    },
+	    mouseup : function(e){
+	        thisWorld.down = false;
+	    },
+	    touchstart : function(e){
+	      document.getElementById("messageBox").blur();
+	      var touch = e.touches[0];
+	      thisWorld.oldX = touch.pageX;
+	      thisWorld.oldY = touch.pageY;
+	      //console.log(oldX + '/' + oldY);
+	    },
+	    touchmove : function (e){
+	      //console.log(oldX + '/' + oldY);
+	      var touch = e.touches[0];
+	      thisWorld.camera.x -= touch.pageX - thisWorld.oldX;
+	      thisWorld.camera.y -= touch.pageY - thisWorld.oldY;
+	      thisWorld.camera.x = thisWorld.setCameraBound('x', thisWorld.camera.x, touch.pageX - thisWorld.oldX);
+	      thisWorld.camera.y = thisWorld.setCameraBound('y', thisWorld.camera.y, touch.pageY - thisWorld.oldY);
 
+	      thisWorld.oldX = touch.pageX;
+	      thisWorld.oldY = touch.pageY;
+	    },
+	    setCameraBound : function(axis, coordinate, moveDirection){
+	      if(axis == 'x'){
+	        if(coordinate * thisWorld.camera.zoom < thisWorld.params.stage.width/2 && moveDirection > 0){
+	          //coordinate = thisWorld.params.stage.width/(2 * thisWorld.camera.zoom);
+
+	        }
+	        else if(coordinate > thisWorld.params.world.width  - thisWorld.params.stage.width/2 &&moveDirection < 0){
+	       	   //coordinate = (thisWorld.params.world.width  - thisWorld.params.stage.width/2) * thisWorld.camera.zoom+16.5;
+	        }
+	        return coordinate;
+	      }
+	      else if(axis == 'y'){
+	       
+	        if(coordinate * thisWorld.camera.zoom < thisWorld.params.stage.height/2 && moveDirection > 0){
+	          //coordinate = thisWorld.params.stage.height/(2 * thisWorld.camera.zoom);
+
+	        }
+	        else if(coordinate > thisWorld.params.world.height  - thisWorld.params.stage.height/2&& moveDirection < 0)
+	        {
+	          //coordinate = (thisWorld.params.world.height  - thisWorld.params.stage.height/2) * thisWorld.camera.zoom+16.5;
+	        }
+	        return coordinate;
+	      }
+	    },
+	    update : function(){
+	    	if(thisWorld.playerCreator.players.children.length != thisWorld.roomManager.room.getPlayerNumber()){
+	    		thisWorld.updatePlayer();
+	    	}
+	    	thisWorld.updateSpeechBubble();
+	    },
+	    updatePlayer : function(){
+	    	thisWorld.playerCreator.removeAll();
+	    	console.log('before');
+	    	console.log(thisWorld.playerCreator.players);
+	    	var seats = thisWorld.roomManager.room.seatManager.objects;
+	    	for(key in seats){
+	    		if(seats[key].state == 'use'){
+	    			var id = seats[key].id;
+	    			var x = seats[key].x;
+	    			var y = seats[key].y;
+	    			var scale = 0.5;
+	    			var nickname = seats[key].player.nickname;
+	    			var thumbnail = seats[key].player.thumbnail;
+	    			thisWorld.playerCreator.createPlayer(id,x,y,nickname,scale,thumbnail);    		
+	    		}
+	    	}
+	    	console.log('after');
+	    	console.log(thisWorld.playerCreator.players);
+	    },
+	    updateSpeechBubble : function(){
+	    	var seats = thisWorld.roomManager.room.seatManager.objects;
+	    	for(key in seats){
+	    		if(seats[key].state == 'use'){
+	    			if(seats[key].player.isTalk){
+	    				var x = seats[key].x;
+	    				var y = seats[key].y;
+	    				console.log(x+'/'+y);
+	    				var message = seats[key].player.talk;
+	    				var scale = 0.5;
+	    				var timeout = 1.5;
+	    				thisWorld.playerCreator.createSpeechBubble(x,y,message,scale,timeout);
+	    				seats[key].player.isTalk = false;
+	    			}
+	    		}
+	    	}
+	    }	
+	}
+
+	module.exports = World;
+
+/***/ },
+/* 15 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var Player = __webpack_require__(16);
+	var SpeechBubbleCreator = __webpack_require__(17);
+
+	var PlayerCreator = function(world, document){
+		this.players = new PIXI.Container();
+		this.world = world;
+		this.world.addChild(this.players);
+		this.speechBubbleCreator = new SpeechBubbleCreator(this.world);
+		this.document = document;
+		playerCreator = this;
+		this.thumbnails = {};
+	}
+
+	PlayerCreator.prototype.constructor = PlayerCreator;
+
+	PlayerCreator.prototype.createPlayerNameTag = function(playerId, x, y, nickname, scale){
+	    var  name = new PIXI.extras.BitmapText(playerId+ ' ' + nickname, {font: "22px Normal", alight: "right"});
+	    name.setTransform(x+15, y+2.5, scale, scale);
+
+	    var table = new PIXI.Graphics();
+	    var nameTag = new PIXI.Container();
+	    table.beginFill(0xffffff);
+	    table.lineStyle(2, 0x000000);
+	    table.drawRect(x, y, (name.textWidth +35)*scale, (name.textHeight+5) *scale);
+
+	    //var thumbnail;
+	    //var thumbnailTexture = new PIXI.Texture(new PIXI.BaseTexture(img));
+	    //thumbnail = new PIXI.Sprite(thumbnailTexture);
+	    //console.log(thumbnailTexture);
+	    //thumbnail.setTransform(x+10, y+5, scale, scale);
+	    //thumbnail.anchor.set(0.5, 0.5);
+
+	    nameTag.addChild(table);
+	    //nameTag.addChild(thumbnail);
+	    nameTag.addChild(name);          
+	    return nameTag;
+	}
+
+	PlayerCreator.prototype.createPlayerSprite = function(playerId, x, y){
+		var playerSprite = new PIXI.Sprite(PIXI.Texture.fromFrame('mafiaCharacter '+playerId+'.ase'));
+		playerSprite.normalTexture = PIXI.Texture.fromFrame('mafiaCharacter_NORMALS '+playerId+'.ase');
+
+		playerSprite.setTransform(x,y);
+		playerSprite.anchor.set(0.5, 0.5);
+		return playerSprite;
+	}
+
+	PlayerCreator.prototype.createPlayer = function(playerId, x, y, nickname, scale, image){
+		var player = new Player(playerId);
+		var playerSprite = playerCreator.createPlayerSprite(playerId, x, y);
+		player.addChild(playerSprite);
+	    //var img = new Image();
+	    //if(typeof image === 'undefined'){
+	    //	img.src = 'assets/images/no_thumbnail.png';
+	    //}
+	    //else{
+	    //	img.src = image; 
+	//
+	    //}
+	    //img.id = 'thumbnail'+playerId; 
+	    //img.style.position = 'absolute';
+	    //img.style.top = y * this.world.camera.zoom;
+	    //img.style.left = x * this.world.camera.zoom;
+	    //img.style.width = '50px';
+	    //img.style.height = '50px';              
+	    //img.onload = function(){
+		//	playerCreator.thumbnails[playerId] = img;	  
+		//	document.body.appendChild(img);  
+	    //}
+	    //img.style.visibility = 'visible';
+	    var playerNameTag = playerCreator.createPlayerNameTag(playerId, x, y, nickname, scale);
+	  	player.addChild(playerNameTag);	
+		playerCreator.players.addChild(player);	
+
+		return player;
+	}
+
+	PlayerCreator.prototype.removePlayer = function(playerId){
+		var playersIndex = playerCreator.world.getChildIndex(playerCreator.players);
+		var players = playerCreator.world.getChildAt(playersIndex);
+		for(var i=0; i<players.children.length; i++){
+			if(players.children[i].id == playerId){
+				return players.removeChildAt(i);
+			}
+		}
+	}
+
+	PlayerCreator.prototype.existPlayer = function(playerId){
+		for(var i=0; i<playerCreator.players.children.length; i++){
+			if(playerCreator.players.children[i].id == playerId){
+				return true;
+			}
+		}
+		return false;
+	}
+
+	PlayerCreator.prototype.removeAll = function(){
+		var playersIndex = playerCreator.world.getChildIndex(playerCreator.players);
+		var players = playerCreator.world.getChildAt(playersIndex);
+		players.removeChildren(0, players.children.length);
+	}
+	PlayerCreator.prototype.createSpeechBubble = function(x, y, message, scale, timeout){
+		playerCreator.speechBubbleCreator.create(x, y, message, scale, timeout);
+	}
+	PlayerCreator.prototype.moveThumbnails = function(x,y){
+		for(key in playerCreator.thumbnails){
+			console.log(playerCreator.thumbnails[key].id);
+			var thumbnail = playerCreator.document.getElementById(playerCreator.thumbnails[key].id);
+			thumbnail.style.top = parseInt(thumbnail.style.top) - y + 'px';
+			thumbnail.style.left = parseInt(thumbnail.style.left) - x + 'px';
+		}
+	}
+	module.exports = PlayerCreator;
+
+/***/ },
+/* 16 */
+/***/ function(module, exports) {
+
+	var Player = function(i){
+		PIXI.Container.call(this);
+		this.id = i;
+	}
+	Player.prototype.constructor = Player;
+	Player.prototype = Object.create(PIXI.Container.prototype);
+
+	module.exports = Player;
+
+
+
+/***/ },
+/* 17 */
+/***/ function(module, exports) {
+
+	var SpeechBubbleCreator = function(world){
+		this.world = world;
+		speechBubbleCreator = this;
+	}
+
+	SpeechBubbleCreator.prototype.constructor = SpeechBubbleCreator;
+	SpeechBubbleCreator.prototype = {
+		create : function(x, y, message, scale, timeout){
+				  var speechBubble = new PIXI.Container();
+	              var contents = new PIXI.extras.BitmapText(message, {font: "18px Normal", align: "right"}); 
+	              var bubble = new PIXI.Container();
+	              var speechBubbleTextures = [];
+	              for(var i=0; i < 9; i++){
+	                var texture = PIXI.Texture.fromFrame('speechBubble '+i+'.ase');
+	                speechBubbleTextures.push(texture);
+	              }
+	              var sprite = new PIXI.Sprite(speechBubbleTextures[0]);
+	              var tileWidth = sprite.width;
+	              var tileHeight = sprite.height;
+	              var xTileNum = Math.ceil((contents.textWidth - (tileWidth - 5) * 2) / tileWidth)+2;
+	              var yTileNum = Math.ceil((contents.textHeight - (tileHeight - 16) * 2) / tileWidth)+2;
+	              var xPos = x - xTileNum * tileWidth/2 * scale;
+	              var yPos = y- (yTileNum+1) * tileHeight * scale;
+	              for(var i=0; i< yTileNum; i++){
+	                var spriteSheetColumn = 0
+	                if(i == 0){
+	                  spriteSheetColumn =0
+	                }
+	                else if(i == (yTileNum -1)){
+	                  spriteSheetColumn = 2;                   
+	                }
+	                else{
+	                  spriteSheetColumn = 1;
+	                }
+	                for(var j=0; j<xTileNum; j++){
+	                  var sprite;
+	                  if(j == 0){
+	                    sprite = new PIXI.Sprite(speechBubbleTextures[3*spriteSheetColumn + 0]);
+	                  }
+	                  else if(j == xTileNum -1){
+	                    sprite = new PIXI.Sprite(speechBubbleTextures[3*spriteSheetColumn + 2]);
+	                  }
+	                  else{
+	                    sprite = new PIXI.Sprite(speechBubbleTextures[3*spriteSheetColumn + 1]);
+	                  }
+	                  sprite.setTransform(xPos, yPos, scale, scale);
+	                  
+	                  bubble.addChild(sprite);
+	                  
+	                  xPos += tileWidth * scale;
+	                }        
+	                xPos = x - xTileNum * tileWidth/2 * scale;
+	                yPos += tileHeight * scale;
+	              }
+	              var contentsXPos = x - (xTileNum-1) * tileWidth/2 * scale;
+	              var contentsYPos = y - (yTileNum) * tileHeight * scale;
+	              contents.setTransform(contentsXPos, contentsYPos, scale, scale);
+	              speechBubble.addChild(bubble);
+	              speechBubble.addChild(contents);
+	              this.world.addChild(speechBubble);
+	              setTimeout(function(){speechBubbleCreator.world.removeChild(speechBubble);}, 1000 * timeout);
+		}
+	}
+
+	module.exports = SpeechBubbleCreator; 
 
 /***/ }
 /******/ ]);

@@ -41,8 +41,8 @@ Chat.prototype = {
 
 		this.chatDiv = $('#chattingBox');
 
-		this.normalTag.start = '<p>';
-		this.normalTag.end = '</p>';
+		this.normalTag.start = '<p class="white">';
+		this.normalTag.end = '</p class="white">';
 
 		this.mafiaTag.start = '<p class="text-danger"><strong>';
 		this.mafiaTag.end = '</strong></p>';

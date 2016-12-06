@@ -37,7 +37,7 @@ Network.prototype = {
  	  this.socket.on('current judge', network.onJudge);
  	},
  	onLeave : function(data){	
- 		this.notifyObserver('leave', data);
+ 		network.notifyObserver('leave', data);
  	},
  	onJoin : function(data){
  		debug.log("LOG", 'join');

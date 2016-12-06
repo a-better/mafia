@@ -24,8 +24,7 @@ Network.prototype = {
 			client.on("save", network.onSave);
 			client.on("judge", network.onJudge);
 			client.on("send message", network.onSendMessage);
-
-			//client.on("disconnect", network.onClientDisconnect);
+			client.on("disconnect", network.onClientDisconnect);
 			///client.on("use skill", network.onUseSkill);
 			//client.on("vote player", network.onVotePlayer);
 			
@@ -47,12 +46,17 @@ Network.prototype = {
 	},
 	onClientDisconnect : function(){
 		debug.log("LOG", 'disconnect' + this.roomId);
-		network.roomManager.leave(this.roomId, this.id);
-		this.broadcast.to(this.roomId).emit('leave', {id : this.id});
+		if(typeof this.roomId == 'undefined'){
+		}
+		else{
+			network.roomManager.leave(this.roomId, this.id);
+			this.broadcast.to(this.roomId).emit('leave', {id : this.id});			
+		}
 	},
 	sendRoomInfo : function(id, roomId){
+
 		var room = network.roomManager.objects[roomId];
-		io.to(id).emit('init', {id : id, actorManager : room.actorManager, minActor : room.minActor});
+		io.to(id).emit('init', {id : id, actorManager : room.actorManager, minActor : room.minActor, maxActor : room.maxActor});
 	},
 	setHost : function(id){
 		io.to(id).emit('host');
@@ -98,7 +102,7 @@ Network.prototype = {
 			}
 			else{
 				if(state == 'night'){
-					if(actorJob == 'mafia'){
+					if(actorJob == 'mafia' || (actorJob == 'spy' && room.actorManager.objects[data.actorId].state.contacted)){
 						var mafias = room.actorManager.getMafiaAndSpy();
 						for(var i=0; i<mafias.length; i++){
 							network.sendMessage( data.actorId, mafias[i].id, 'mafia', data.message);

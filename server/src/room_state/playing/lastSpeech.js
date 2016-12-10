@@ -8,7 +8,7 @@ var LastSpeech = function(id){
 	this.enableVote = true;
 
 	this.candidate = '';
-	this.time = 5;
+	this.time = 20;
 }
 LastSpeech.prototype.constructor = LastSpeech;
 LastSpeech.prototype = Object.create(Playing.prototype);

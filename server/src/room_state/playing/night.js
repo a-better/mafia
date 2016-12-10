@@ -8,7 +8,7 @@ var Night = function(id){
 	this.enableDetect = true;
 	this.enableVote = false;
 
-	this.time = 5;
+	this.time = 60;
 }
 Night.prototype.constructor = Night;
 Night.prototype = Object.create(Playing.prototype);
